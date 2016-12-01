@@ -103,7 +103,7 @@ Retorna:
 	SUCESSO: 0
 	ERRO: qualquer valor diferente de zero
 -------------------------------------------------------------*/
-int allocateBlock(int blockNumber);
+int allocateBlock();
 
 /*-------------------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 	Fun��o que atualiza o bit indicado por inodeNumber para um, ou seja, aloca o inode

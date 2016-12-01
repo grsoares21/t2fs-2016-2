@@ -125,10 +125,84 @@ int truncateInode(int inodeNumber, int fromBlockIndex) {
 	return 0;
 }
 
+void allocateBlockForInode(int inodeNumber, int blockIndex) {
+	int allocatedBlockNumber = allocateBlock();
+	struct t2fs_inode* inode = getInode(inodeNumber);
+
+	unsigned char *allocBlckNbrLtlEnd = (unsigned char*)malloc(sizeof(unsigned char) * 4);
+
+	allocBlckNbrLtlEnd[0] = allocatedBlockNumber;
+	allocBlckNbrLtlEnd[1] = allocatedBlockNumber >> 8;
+	allocBlckNbrLtlEnd[2] = allocatedBlockNumber >> 16;
+	allocBlckNbrLtlEnd[3] = allocatedBlockNumber >> 24; //conversao little-endian
+
+	if(blockIndex < 2) {
+		//TODO: verificar se o bloco alocado não é -1 (erro)
+		inode->dataPtr[blockIndex] = allocatedBlockNumber;
+		writeInode(inodeNumber, *inode);
+	} else if(blockIndex < 1026) {
+		if(blockIndex == 2) {
+			inode->singleIndPtr = allocateBlock();
+			writeInode(inodeNumber, *inode);
+		}
+		writeInBlock(inode->singleIndPtr, (blockIndex - 2)*4, allocBlckNbrLtlEnd, 4);
+	} else {
+		int firstIndIndex = (blockIndex - 1026) / 1024;
+		int secondIndIndex = (blockIndex - 1026) - (firstIndIndex * 1024);
+
+		char *firstIndBlock = getBlock(inode->doubleIndPtr);
+		int secondIndBlockNumber = getNthIntegerFromBlock(firstIndBlock, firstIndIndex);
+
+		if(blockIndex == 1026) {
+			inode->doubleIndPtr = allocateBlock();
+			writeInode(inodeNumber, *inode);
+		} if((blockIndex - 1026) % 1024 == 0) {
+			int secondIndBlockNbr = allocateBlock();
+
+			unsigned char* scndIndBlckNbrLtlEnd = (unsigned char*)malloc(sizeof(char)*4);
+			scndIndBlckNbrLtlEnd[0] = secondIndBlockNbr;
+			scndIndBlckNbrLtlEnd[1] = secondIndBlockNbr >> 8;
+			scndIndBlckNbrLtlEnd[2] = secondIndBlockNbr >> 16;
+			scndIndBlckNbrLtlEnd[3] = secondIndBlockNbr >> 24; //conversao little-endian
+
+			writeInBlock(inode->doubleIndPtr, (firstIndIndex)*4, scndIndBlckNbrLtlEnd, 4);
+			free(scndIndBlckNbrLtlEnd);
+		}
+		writeInBlock(secondIndBlockNumber, secondIndIndex*4, allocBlckNbrLtlEnd, 4);
+	}
+	free(allocBlckNbrLtlEnd);
+
+	return;
+}
+
 /*------ FUNCOES DA INTERFACE ------
 	Regiao do codigo que possui as funcoes da file_interface e que estao expostas no header.
 ----------------------------*/
 struct t2fs_record* getRecord(char *path) {
 	//struct t2fs_inode* rootInode = getInode(0);
 	return NULL;
+}
+
+char* readFromInode(int inodeNumber, unsigned int fileHandle, int size) {
+	struct t2fs_inode* inode = getInode(inodeNumber);
+	int firstBlockIndex = (int)fileHandle / 4096;
+	int numberOfBlocks = (size / 4096) + 1;
+
+	char* blocksData = (char*)malloc(sizeof(char)*4096*numberOfBlocks);
+	char* finalData = (char*)malloc(sizeof(char)*size);
+
+	int i;
+	//le todos os blocos e guarda em blockData
+	for(i = firstBlockIndex; i < firstBlockIndex + numberOfBlocks; i++) {
+		char* currentBlockData = getNthBlockInInode(*inode, i);
+		memcpy(blocksData + (4096*(i - firstBlockIndex)), currentBlockData, 4096);
+		free(currentBlockData);
+	}
+	memcpy(finalData, blocksData + (fileHandle - (4096*firstBlockIndex)), size);
+
+	return finalData;
+}
+
+int writeInInode(int inodeNumber, unsigned int fileHandle, unsigned char* data, int size) {
+	return -1;
 }
