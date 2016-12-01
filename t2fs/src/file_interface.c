@@ -68,6 +68,63 @@ char* getNthBlockInInode(struct t2fs_inode inode, int index) {
 	return NULL;
 }
 
+int truncateInode(int inodeNumber, int fromBlockIndex) {
+	struct t2fs_inode* originalInode = getInode(inodeNumber);
+	struct t2fs_inode temporaryInode = *originalInode;
+	int currBlockNumber = getNthBlockNumberInInode(*originalInode, fromBlockIndex);
+
+	unsigned char *invalidPtrLtlEnd = (unsigned char*)malloc(sizeof(unsigned char) * 4);
+
+	invalidPtrLtlEnd[0] = INVALID_PTR;
+	invalidPtrLtlEnd[1] = INVALID_PTR >> 8;
+	invalidPtrLtlEnd[2] = INVALID_PTR >> 16;
+	invalidPtrLtlEnd[3] = INVALID_PTR >> 24; //conversao little-endian
+
+	int currBlockIndex = fromBlockIndex;
+
+	while(currBlockNumber != INVALID_PTR) {
+		if(currBlockIndex == 1) { //a partir do bloco 2 eh o minimo, pois o primeiro bloco sempre existe
+			temporaryInode.dataPtr[1] = INVALID_PTR;
+			writeInode(inodeNumber, temporaryInode);
+			freeBlock(originalInode->dataPtr[1]);
+			freeBlock(currBlockNumber);
+		} else if(currBlockIndex < 1026) {
+			if(currBlockIndex == 2) {
+				temporaryInode.singleIndPtr = INVALID_PTR;
+				writeInode(inodeNumber, temporaryInode);
+				freeBlock(originalInode->singleIndPtr);
+			}
+
+			writeInBlock(originalInode->singleIndPtr, (currBlockIndex - 2)*4, invalidPtrLtlEnd, 4);
+			freeBlock(currBlockNumber);
+		} else {
+			int firstIndIndex = (currBlockIndex - 1026) / 1024;
+			int secondIndIndex = (currBlockIndex - 1026) - (firstIndIndex * 1024);
+
+			char *firstIndBlock = getBlock(originalInode->doubleIndPtr);
+			int secondIndBlockNumber = getNthIntegerFromBlock(firstIndBlock, firstIndIndex);
+
+			if(currBlockIndex == 1026) {
+				temporaryInode.doubleIndPtr = INVALID_PTR;
+				writeInode(inodeNumber, temporaryInode);
+				freeBlock(originalInode->doubleIndPtr);
+			} if((currBlockIndex - 1026) % 1024 == 0) {
+				writeInBlock(originalInode->doubleIndPtr, (firstIndIndex)*4, invalidPtrLtlEnd, 4);
+				freeBlock(secondIndBlockNumber);
+			}
+
+			free(firstIndBlock);
+			writeInBlock(secondIndBlockNumber, secondIndIndex*4, invalidPtrLtlEnd, 4);
+			freeBlock(currBlockNumber);
+		}
+		currBlockIndex++;
+		currBlockNumber = getNthBlockNumberInInode(*originalInode, currBlockIndex);
+	}
+
+	free(invalidPtrLtlEnd);
+	return 0;
+}
+
 /*------ FUNCOES DA INTERFACE ------
 	Regiao do codigo que possui as funcoes da file_interface e que estao expostas no header.
 ----------------------------*/
