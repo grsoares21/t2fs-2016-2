@@ -21,6 +21,14 @@ int getNthIntegerFromBlock(char* block, int index) {
 	return integer;
 }
 
+int min(int a, int b) {
+	if(a < b) {
+		return a;
+	} else {
+		return b;
+	}
+}
+
 int getNthBlockNumberInInode(struct t2fs_inode inode, int index) {
 	if(index < 2) {
 		return inode.dataPtr[index];
@@ -66,63 +74,6 @@ char* getNthBlockInInode(struct t2fs_inode inode, int index) {
 		return getBlock(blockNumber);
 	}
 	return NULL;
-}
-
-int truncateInode(int inodeNumber, int fromBlockIndex) {
-	struct t2fs_inode* originalInode = getInode(inodeNumber);
-	struct t2fs_inode temporaryInode = *originalInode;
-	int currBlockNumber = getNthBlockNumberInInode(*originalInode, fromBlockIndex);
-
-	unsigned char *invalidPtrLtlEnd = (unsigned char*)malloc(sizeof(unsigned char) * 4);
-
-	invalidPtrLtlEnd[0] = INVALID_PTR;
-	invalidPtrLtlEnd[1] = INVALID_PTR >> 8;
-	invalidPtrLtlEnd[2] = INVALID_PTR >> 16;
-	invalidPtrLtlEnd[3] = INVALID_PTR >> 24; //conversao little-endian
-
-	int currBlockIndex = fromBlockIndex;
-
-	while(currBlockNumber != INVALID_PTR) {
-		if(currBlockIndex == 1) { //a partir do bloco 2 eh o minimo, pois o primeiro bloco sempre existe
-			temporaryInode.dataPtr[1] = INVALID_PTR;
-			writeInode(inodeNumber, temporaryInode);
-			freeBlock(originalInode->dataPtr[1]);
-			freeBlock(currBlockNumber);
-		} else if(currBlockIndex < 1026) {
-			if(currBlockIndex == 2) {
-				temporaryInode.singleIndPtr = INVALID_PTR;
-				writeInode(inodeNumber, temporaryInode);
-				freeBlock(originalInode->singleIndPtr);
-			}
-
-			writeInBlock(originalInode->singleIndPtr, (currBlockIndex - 2)*4, invalidPtrLtlEnd, 4);
-			freeBlock(currBlockNumber);
-		} else {
-			int firstIndIndex = (currBlockIndex - 1026) / 1024;
-			int secondIndIndex = (currBlockIndex - 1026) - (firstIndIndex * 1024);
-
-			char *firstIndBlock = getBlock(originalInode->doubleIndPtr);
-			int secondIndBlockNumber = getNthIntegerFromBlock(firstIndBlock, firstIndIndex);
-
-			if(currBlockIndex == 1026) {
-				temporaryInode.doubleIndPtr = INVALID_PTR;
-				writeInode(inodeNumber, temporaryInode);
-				freeBlock(originalInode->doubleIndPtr);
-			} if((currBlockIndex - 1026) % 1024 == 0) {
-				writeInBlock(originalInode->doubleIndPtr, (firstIndIndex)*4, invalidPtrLtlEnd, 4);
-				freeBlock(secondIndBlockNumber);
-			}
-
-			free(firstIndBlock);
-			writeInBlock(secondIndBlockNumber, secondIndIndex*4, invalidPtrLtlEnd, 4);
-			freeBlock(currBlockNumber);
-		}
-		currBlockIndex++;
-		currBlockNumber = getNthBlockNumberInInode(*originalInode, currBlockIndex);
-	}
-
-	free(invalidPtrLtlEnd);
-	return 0;
 }
 
 void allocateBlockForInode(int inodeNumber, int blockIndex) {
@@ -183,6 +134,63 @@ struct t2fs_record* getRecord(char *path) {
 	return NULL;
 }
 
+int truncateInode(int inodeNumber, int fromBlockIndex) {
+	struct t2fs_inode* originalInode = getInode(inodeNumber);
+	struct t2fs_inode temporaryInode = *originalInode;
+	int currBlockNumber = getNthBlockNumberInInode(*originalInode, fromBlockIndex);
+
+	unsigned char *invalidPtrLtlEnd = (unsigned char*)malloc(sizeof(unsigned char) * 4);
+
+	invalidPtrLtlEnd[0] = INVALID_PTR;
+	invalidPtrLtlEnd[1] = INVALID_PTR >> 8;
+	invalidPtrLtlEnd[2] = INVALID_PTR >> 16;
+	invalidPtrLtlEnd[3] = INVALID_PTR >> 24; //conversao little-endian
+
+	int currBlockIndex = fromBlockIndex;
+
+	while(currBlockNumber != INVALID_PTR) {
+		if(currBlockIndex == 1) { //a partir do bloco 2 eh o minimo, pois o primeiro bloco sempre existe
+			temporaryInode.dataPtr[1] = INVALID_PTR;
+			writeInode(inodeNumber, temporaryInode);
+			freeBlock(originalInode->dataPtr[1]);
+			freeBlock(currBlockNumber);
+		} else if(currBlockIndex < 1026) {
+			if(currBlockIndex == 2) {
+				temporaryInode.singleIndPtr = INVALID_PTR;
+				writeInode(inodeNumber, temporaryInode);
+				freeBlock(originalInode->singleIndPtr);
+			}
+
+			writeInBlock(originalInode->singleIndPtr, (currBlockIndex - 2)*4, invalidPtrLtlEnd, 4);
+			freeBlock(currBlockNumber);
+		} else {
+			int firstIndIndex = (currBlockIndex - 1026) / 1024;
+			int secondIndIndex = (currBlockIndex - 1026) - (firstIndIndex * 1024);
+
+			char *firstIndBlock = getBlock(originalInode->doubleIndPtr);
+			int secondIndBlockNumber = getNthIntegerFromBlock(firstIndBlock, firstIndIndex);
+
+			if(currBlockIndex == 1026) {
+				temporaryInode.doubleIndPtr = INVALID_PTR;
+				writeInode(inodeNumber, temporaryInode);
+				freeBlock(originalInode->doubleIndPtr);
+			} if((currBlockIndex - 1026) % 1024 == 0) {
+				writeInBlock(originalInode->doubleIndPtr, (firstIndIndex)*4, invalidPtrLtlEnd, 4);
+				freeBlock(secondIndBlockNumber);
+			}
+
+			free(firstIndBlock);
+			writeInBlock(secondIndBlockNumber, secondIndIndex*4, invalidPtrLtlEnd, 4);
+			freeBlock(currBlockNumber);
+		}
+		currBlockIndex++;
+		currBlockNumber = getNthBlockNumberInInode(*originalInode, currBlockIndex);
+	}
+
+	free(invalidPtrLtlEnd);
+	return 0;
+}
+
 char* readFromInode(int inodeNumber, unsigned int fileHandle, int size) {
 	struct t2fs_inode* inode = getInode(inodeNumber);
 	int firstBlockIndex = (int)fileHandle / 4096;
@@ -203,6 +211,30 @@ char* readFromInode(int inodeNumber, unsigned int fileHandle, int size) {
 	return finalData;
 }
 
-int writeInInode(int inodeNumber, unsigned int fileHandle, unsigned char* data, int size) {
-	return -1;
+void writeInInode(int inodeNumber, unsigned int fileHandle, unsigned char* data, int size) {
+	struct t2fs_inode* inode = getInode(inodeNumber);
+	int writtenBytes = 0;
+
+	while(writtenBytes < size) {
+		int currentBlockIndex = ((int)fileHandle + writtenBytes) / 4096;
+		int currentInBlockIndex = ((int)fileHandle + writtenBytes) - (currentInBlockIndex * 4096);
+
+		int currentBlockNumber = getNthBlockNumberInInode(*inode, currentBlockIndex);
+		if(currentBlockNumber == INVALID_PTR) {
+			allocateBlockForInode(inodeNumber, currentBlockIndex);
+			currentBlockNumber = getNthBlockNumberInInode(*inode, currentBlockIndex);
+		}
+		char* currentBlock = getNthBlockInInode(*inode, currentBlockIndex);
+
+		int nbOfBytesLeft = size - writtenBytes;
+		int spaceLeftInBlock = 4096 - currentInBlockIndex;
+		int nbOfBytesToWrite = min(nbOfBytesLeft, spaceLeftInBlock);
+
+		memcpy(currentBlock + currentInBlockIndex, data + writtenBytes, nbOfBytesToWrite);
+		writeBlock(currentBlockNumber, currentBlock);
+		free(currentBlock);
+		writtenBytes += nbOfBytesToWrite;
+	}
+
+	return;
 }
