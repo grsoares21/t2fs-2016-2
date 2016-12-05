@@ -25,6 +25,8 @@ Retorna:
 	ERRO: NULL
 -------------------------------------------------------------*/
 
-struct t2fs_record* getRecord(char *path);
+struct t2fs_record getRecord(char *path);
+
+
 
 #endif

@@ -113,7 +113,7 @@ Retorna:
 	SUCESSO: 0
 	ERRO: qualquer valor diferente de zero
 -------------------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
-int allocateInode(int inodeNumber);
+int allocateInode();
 
 /*-------------------------------------------------------------
 	Fun��o que atualiza o bit indicado por blockNumber para zero, ou seja, libera o bloco
