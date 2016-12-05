@@ -61,6 +61,7 @@ FILE2 open2 (char *filename) {
 		return -1;
 
 	listaFile2[freeIndex]->fileRecord = *record;
+	listaFile2[freeIndex]->filePath = filename;
 
 	return freeIndex;
 }
@@ -92,6 +93,19 @@ int seek2(FILE2 handle, unsigned int offset) {
 	listaFile2[handle]->handle = offset;
 
 	return 0;
+}
+
+int delete2 (char *filename) {
+	return deleteRecord(filename);
+}
+
+int truncate2(FILE2 handle) {
+	struct t2fs_open_file* file = listaFile2[handle];
+	file->fileRecord.bytesFileSize = file->handle;
+	file->fileRecord.blocksFileSize = file->handle / 4096;
+
+	truncateInode(file->fileRecord.inodeNumber, file->fileRecord.blocksFileSize);
+	return updateRecord(file->filePath, file->fileRecord);
 }
 
 //TODO: verificar erros das funções implementadas e documentar os contratos

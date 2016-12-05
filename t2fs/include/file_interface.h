@@ -34,5 +34,8 @@ struct t2fs_record* createRecord(char *path, BYTE type);
 struct t2fs_record* getRecord(char *path);
 char* readFromInode(int inodeNumber, unsigned int fileHandle, int size);
 void writeInInode(int inodeNumber, unsigned int fileHandle, char* data, int size);
+int truncateInode(int inodeNumber, int fromBlockIndex);
+int deleteRecord(char* filePath);
+int updateRecord(char *filePath, struct t2fs_record newRecord);
 
 #endif

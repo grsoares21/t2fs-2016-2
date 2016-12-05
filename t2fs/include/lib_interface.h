@@ -13,6 +13,7 @@
 struct t2fs_open_file {
 	struct t2fs_record fileRecord;
 	unsigned int handle;
+	char* filePath;
 };
 
 

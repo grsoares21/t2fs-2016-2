@@ -9,6 +9,21 @@
 	Regiao do codigo que possui apenas funcoes auxiliares utilizadas exclusivamente pela file_interface.
 	Estas funcoes nao sao expostas no header.
  ----------------------------------*/
+char* intToChar4LtlEnd(int number) {
+	char* result = (char*)malloc(sizeof(char)*4);
+	result[0] = number;
+	result[1] = number >> 8;
+	result[2] = number >> 16;
+	result[3] = number >> 24;
+
+	return result;
+}
+
+int charToInt4LtlEnd(char* array) {
+	return (int)(array[0]) | (int)(array[1] << 8)
+							| (int)(array[2] << 16) | (int)(array[3] << 24);
+}
+
 int getNthIntegerFromBlock(char* block, int index) {
 	char* integerBytes = (char*)malloc(sizeof(char)*4);
 
@@ -233,6 +248,102 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 	return NULL;
 }
 
+struct t2fs_record* getFatherDir(char* path) {
+	char* prevName = strtok(path, "/");
+	char* fileName;
+	while(prevName != NULL) {
+		fileName = prevName;
+		prevName = strtok(NULL, "/");
+	}
+
+	int dirPathSize = strlen(path) - strlen(fileName);
+	char* dirPath = (char*)malloc(sizeof(char)*dirPathSize);
+
+	memcpy(dirPath, path, dirPathSize);
+
+	return getRecord(dirPath);
+}
+
+int deleteRecord(char* filePath) {
+	struct t2fs_record* fatherDirRecord = getFatherDir(filePath);
+	struct t2fs_record* fileRecord = getRecord(filePath);
+	struct t2fs_inode* dirInode = getInode(fatherDirRecord->inodeNumber);
+
+	int currentBlockIndex = 0;
+	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
+	char* currentBlock = getBlock(currentBlockNumber);
+
+	while(currentBlock != NULL) {
+		int currentInBlockIndex;
+		for(currentInBlockIndex = 0; currentInBlockIndex < 4096; currentInBlockIndex += 64) {
+			if(strcmp(currentBlock+currentInBlockIndex+1, fileRecord->name) == 0) {
+				currentBlock[currentInBlockIndex] = (BYTE)0x00;
+				writeBlock(currentBlockNumber, currentBlock);
+				truncateInode(fileRecord->inodeNumber, 0);
+				free(currentBlock);
+				return 0;
+			}
+		}
+		currentBlockIndex++;
+		currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
+		free(currentBlock);
+		currentBlock = getBlock(currentBlockNumber);
+	}
+
+	return -1;
+}
+
+int updateRecord(char *filePath, struct t2fs_record newRecord) {
+	struct t2fs_record* fatherDirRecord = getFatherDir(filePath);
+
+	char* prevName = strtok(filePath, "/");
+	char* fileName;
+	while(prevName != NULL) {
+		fileName = prevName;
+		prevName = strtok(NULL, "/");
+	}
+
+	struct t2fs_inode* dirInode = getInode(fatherDirRecord->inodeNumber);
+
+	int currentBlockIndex = 0;
+	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
+	char* currentBlock = getBlock(currentBlockNumber);
+
+	while(currentBlock != NULL) {
+		int currentInBlockIndex;
+		for(currentInBlockIndex = 0; currentInBlockIndex < 4096; currentInBlockIndex += 64) {
+			if(strcmp(currentBlock+currentInBlockIndex+1, fileName) == 0) {
+				currentBlock[currentInBlockIndex] = newRecord.TypeVal;
+				memcpy(currentBlock+currentBlockIndex+1, newRecord.name, strlen(newRecord.name));
+				currentBlock[currentInBlockIndex+1+strlen(newRecord.name)] = '\n';
+
+				char* blocksSizeLtlEnd = intToChar4LtlEnd(newRecord.blocksFileSize);
+				memcpy(currentBlock+currentInBlockIndex+32, blocksSizeLtlEnd, 4);
+				free(blocksSizeLtlEnd);
+
+				char* bytesSizeLtlEnd = intToChar4LtlEnd(newRecord.bytesFileSize);
+				memcpy(currentBlock+currentInBlockIndex+36, bytesSizeLtlEnd, 4);
+				free(blocksSizeLtlEnd);
+
+				char* inodeNumberLtlEnd = intToChar4LtlEnd(newRecord.inodeNumber);
+				memcpy(currentBlock+currentInBlockIndex+40, inodeNumberLtlEnd, 4);
+				free(inodeNumberLtlEnd);
+
+				writeBlock(currentBlockNumber, currentBlock);
+				free(currentBlock);
+				return 0;
+			}
+		}
+		currentBlockIndex++;
+		currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
+		free(currentBlock);
+		currentBlock = getBlock(currentBlockNumber);
+	}
+
+	return -1;
+}
+
+
 struct t2fs_record* getRecord(char *path) {
 	char* currentRecName = strtok(path, "/");
 	struct t2fs_record* currentRecord = NULL;
@@ -268,10 +379,10 @@ int truncateInode(int inodeNumber, int fromBlockIndex) {
 	int currBlockIndex = fromBlockIndex;
 
 	while(currBlockNumber != INVALID_PTR) {
-		if(currBlockIndex == 1) { //a partir do bloco 2 eh o minimo, pois o primeiro bloco sempre existe
-			temporaryInode.dataPtr[1] = INVALID_PTR;
+		if(currBlockIndex < 2) {
+			temporaryInode.dataPtr[currBlockIndex] = INVALID_PTR;
 			writeInode(inodeNumber, temporaryInode);
-			freeBlock(originalInode->dataPtr[1]);
+			freeBlock(originalInode->dataPtr[currBlockIndex]);
 			freeBlock(currBlockNumber);
 		} else if(currBlockIndex < 1026) {
 			if(currBlockIndex == 2) {
