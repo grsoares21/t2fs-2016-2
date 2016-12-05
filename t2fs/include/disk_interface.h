@@ -44,7 +44,7 @@ Retorna:
 	SUCESSO: estrutura t2fs_inode com os seus respectivos valores j� setados
 	ERRO: NULL
 -------------------------------------------------------------*/
-struct t2fs_inode* getInode(int inodeNumber);
+struct t2fs_inode* getInode(unsigned int inodeNumber);
 
 
 /*=============================================================
@@ -135,5 +135,7 @@ Retorna:
 -------------------------------------------------------------*/
 int freeInode(int inodeNumber);
 
+char* intToChar4LtlEnd(int number);
+unsigned int charToInt4LtlEnd(unsigned char* array);
 
 #endif

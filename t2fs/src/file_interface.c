@@ -9,20 +9,7 @@
 	Regiao do codigo que possui apenas funcoes auxiliares utilizadas exclusivamente pela file_interface.
 	Estas funcoes nao sao expostas no header.
  ----------------------------------*/
-char* intToChar4LtlEnd(int number) {
-	char* result = (char*)malloc(sizeof(char)*4);
-	result[0] = number;
-	result[1] = number >> 8;
-	result[2] = number >> 16;
-	result[3] = number >> 24;
 
-	return result;
-}
-
-int charToInt4LtlEnd(char* array) {
-	return (int)(array[0]) | (int)(array[1] << 8)
-							| (int)(array[2] << 16) | (int)(array[3] << 24);
-}
 
 int getNthIntegerFromBlock(char* block, int index) {
 	char* integerBytes = (char*)malloc(sizeof(char)*4);
@@ -170,15 +157,12 @@ struct t2fs_record_list* getRecordsInDir(int inodeNumber) {
 			currentRecord->fileRecord = (struct t2fs_record*)malloc(sizeof(struct t2fs_record));
 			currentRecord->fileRecord->TypeVal = recordType;
 			memcpy(currentRecord->fileRecord->name, currentBlock + currentInBlockIndex + 1, 31);
-			currentRecord->fileRecord->name[31] = '\n';
+			currentRecord->fileRecord->name[31] = '\0';
 
-			DWORD blocksFileSize = (DWORD)(currentBlock[currentInBlockIndex+32]) | (DWORD)(currentBlock[currentInBlockIndex+33] << 8)
-						| (DWORD)(currentBlock[currentInBlockIndex+34] << 16) | (DWORD)(currentBlock[currentInBlockIndex+35] << 24);
-			DWORD bytesFileSize = (DWORD)(currentBlock[currentInBlockIndex+36]) | (DWORD)(currentBlock[currentInBlockIndex+37] << 8)
-						| (DWORD)(currentBlock[currentInBlockIndex+38] << 16) | (DWORD)(currentBlock[currentInBlockIndex+39] << 24);
+			DWORD blocksFileSize = charToInt4LtlEnd(currentBlock+currentInBlockIndex+33);
+			DWORD bytesFileSize = charToInt4LtlEnd(currentBlock+currentInBlockIndex+37);
 
-			int iNumber = (int)(currentBlock[currentInBlockIndex+40]) | (int)(currentBlock[currentInBlockIndex+41] << 8)
-						| (int)(currentBlock[currentInBlockIndex+42] << 16) | (int)(currentBlock[currentInBlockIndex+43] << 24);
+			DWORD iNumber = charToInt4LtlEnd(currentBlock+currentInBlockIndex+41);
 
 			currentRecord->fileRecord->blocksFileSize = blocksFileSize;
 			currentRecord->fileRecord->bytesFileSize = bytesFileSize;
@@ -205,7 +189,7 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 		prevName = strtok(NULL, "/");
 	}
 	memcpy(record->name, fileName, 31);
-	record->name[31] = '\n';
+	record->name[31] = '\0';
 
 	int dirPathSize = strlen(path) - strlen(fileName);
 
@@ -224,7 +208,7 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 			if(recordType == (BYTE)0x00) { //registro livre
 				currentBlock[currentInBlockIndex] = (char)type;
 				memcpy(currentBlock+currentBlockIndex+1, fileName, strlen(fileName));
-				currentBlock[currentInBlockIndex+1+strlen(fileName)] = '\n';
+				currentBlock[currentInBlockIndex+1+strlen(fileName)] = '\0';
 
 				int sizeBytesIndex;
 				for(sizeBytesIndex = currentInBlockIndex+32; sizeBytesIndex < currentInBlockIndex+40; sizeBytesIndex++) {
@@ -248,26 +232,30 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 	return NULL;
 }
 
-struct t2fs_record* getFatherDir(char* path) {
+struct t2fs_inode* getFatherDirInode(char* path) {
 	char* prevName = strtok(path, "/");
-	char* fileName;
+	char* fileName = NULL;
 	while(prevName != NULL) {
 		fileName = prevName;
 		prevName = strtok(NULL, "/");
 	}
 
 	int dirPathSize = strlen(path) - strlen(fileName);
-	char* dirPath = (char*)malloc(sizeof(char)*dirPathSize);
-
+	char* dirPath = (char*)malloc(sizeof(char)*(dirPathSize+1));
+    dirPath[dirPathSize] = '\0';
 	memcpy(dirPath, path, dirPathSize);
 
-	return getRecord(dirPath);
+    if(strcmp(dirPath, "/") == 0) {
+        return getInode(0);
+    } else {
+        struct t2fs_record* dirRecord = getRecord(dirPath);
+        return getInode(dirRecord->inodeNumber);
+    }
 }
 
 int deleteRecord(char* filePath) {
-	struct t2fs_record* fatherDirRecord = getFatherDir(filePath);
 	struct t2fs_record* fileRecord = getRecord(filePath);
-	struct t2fs_inode* dirInode = getInode(fatherDirRecord->inodeNumber);
+	struct t2fs_inode* dirInode = getFatherDirInode(filePath);
 
 	int currentBlockIndex = 0;
 	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
@@ -294,7 +282,7 @@ int deleteRecord(char* filePath) {
 }
 
 int updateRecord(char *filePath, struct t2fs_record newRecord) {
-	struct t2fs_record* fatherDirRecord = getFatherDir(filePath);
+	struct t2fs_inode* dirInode = getFatherDirInode(filePath);
 
 	char* prevName = strtok(filePath, "/");
 	char* fileName;
@@ -302,8 +290,6 @@ int updateRecord(char *filePath, struct t2fs_record newRecord) {
 		fileName = prevName;
 		prevName = strtok(NULL, "/");
 	}
-
-	struct t2fs_inode* dirInode = getInode(fatherDirRecord->inodeNumber);
 
 	int currentBlockIndex = 0;
 	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
@@ -315,7 +301,7 @@ int updateRecord(char *filePath, struct t2fs_record newRecord) {
 			if(strcmp(currentBlock+currentInBlockIndex+1, fileName) == 0) {
 				currentBlock[currentInBlockIndex] = newRecord.TypeVal;
 				memcpy(currentBlock+currentBlockIndex+1, newRecord.name, strlen(newRecord.name));
-				currentBlock[currentInBlockIndex+1+strlen(newRecord.name)] = '\n';
+				currentBlock[currentInBlockIndex+1+strlen(newRecord.name)] = '\0';
 
 				char* blocksSizeLtlEnd = intToChar4LtlEnd(newRecord.blocksFileSize);
 				memcpy(currentBlock+currentInBlockIndex+32, blocksSizeLtlEnd, 4);

@@ -55,18 +55,23 @@ FILE2 open2 (char *filename) {
 
 	listaFile2[freeIndex] = (struct t2fs_open_file*)malloc(sizeof(struct t2fs_open_file));
 	listaFile2[freeIndex]->handle = 0;
+	listaFile2[freeIndex]->filePath = (char*)malloc(sizeof(char)*strlen(filename));
+	memcpy(listaFile2[freeIndex]->filePath, filename, strlen(filename));
 
 	struct t2fs_record* record = getRecord(filename);
 	if(record == NULL)
 		return -1;
 
 	listaFile2[freeIndex]->fileRecord = *record;
-	listaFile2[freeIndex]->filePath = filename;
 
 	return freeIndex;
 }
 
 int close2 (FILE2 handle) {
+    if(listaFile2[handle] == NULL) {
+        return -1;
+    }
+
 	free(listaFile2[handle]);
 	listaFile2[handle] = NULL;
 
@@ -74,19 +79,33 @@ int close2 (FILE2 handle) {
 }
 
 int read2 (FILE2 handle, char *buffer, int size) {
-	char* readBytes = readFromInode(listaFile2[handle]->fileRecord.inodeNumber, listaFile2[handle]->handle, size);
-	memcpy(buffer, readBytes, size);
-	free(readBytes);
-	listaFile2[handle]->handle = listaFile2[handle]->handle + size;
+    if(listaFile2[handle] == NULL) {
+        return -1;
+    }
 
-	return 0;
+    int bytesToRead = min(size, listaFile2[handle]->fileRecord.bytesFileSize - listaFile2[handle]->handle);
+	char* readBytes = readFromInode(listaFile2[handle]->fileRecord.inodeNumber, listaFile2[handle]->handle, bytesToRead);
+	memcpy(buffer, readBytes, bytesToRead);
+	free(readBytes);
+	listaFile2[handle]->handle = listaFile2[handle]->handle + bytesToRead;
+	return bytesToRead;
 }
 
 int write2 (FILE2 handle, char *buffer, int size) {
+    if(listaFile2[handle] == NULL) {
+        return -1;
+    }
+
 	writeInInode(listaFile2[handle]->fileRecord.inodeNumber, listaFile2[handle]->handle, buffer, size);
+	if(listaFile2[handle]->handle + size > listaFile2[handle]->fileRecord.bytesFileSize) {
+        listaFile2[handle]->fileRecord.bytesFileSize = listaFile2[handle]->handle + size;
+        listaFile2[handle]->fileRecord.blocksFileSize = (listaFile2[handle]->handle + size) / 4096;
+        updateRecord(listaFile2[handle]->filePath, listaFile2[handle]->fileRecord);
+	}
+
 	listaFile2[handle]->handle = listaFile2[handle]->handle + size;
 
-	return 0;
+	return size;
 }
 
 int seek2(FILE2 handle, unsigned int offset) {
