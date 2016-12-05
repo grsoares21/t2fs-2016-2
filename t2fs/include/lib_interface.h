@@ -16,5 +16,10 @@ struct t2fs_open_file {
 	char* filePath;
 };
 
+struct t2fs_open_dir {
+	struct t2fs_record fileRecord;
+	int currentDirentIndex;
+};
+
 
 #endif

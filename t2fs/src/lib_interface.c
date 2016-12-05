@@ -5,7 +5,7 @@
 #include "../include/file_interface.h"
 #include "../include/lib_interface.h"
 
-struct t2fs_record* listaDir2[20];
+struct t2fs_open_dir* listaDir2[20];
 struct t2fs_open_file* listaFile2[20];
 
 int identify2(char *name, int size)
@@ -107,5 +107,88 @@ int truncate2(FILE2 handle) {
 	truncateInode(file->fileRecord.inodeNumber, file->fileRecord.blocksFileSize);
 	return updateRecord(file->filePath, file->fileRecord);
 }
+
+int mkdir2 (char *pathname) {
+ 	if(createRecord(pathname, (BYTE)0x02) != NULL) {
+		return 0;
+	}
+	return -1;
+}
+
+int rmdir2 (char *pathname) {
+	struct t2fs_record* dirRecord = getRecord(pathname);
+	struct t2fs_record_list* currentChildRecord = getRecordsInDir(dirRecord->inodeNumber);
+	while(currentChildRecord != NULL) {
+		int pathNameSize = strlen(pathname);
+		int childRecordNameSize = strlen(currentChildRecord->fileRecord->name);
+		char* recordPath = (char*)malloc(sizeof(char)*(pathNameSize + childRecordNameSize + 2));
+		memcpy(recordPath, pathname, pathNameSize);
+		recordPath[pathNameSize] = '/';
+		memcpy(recordPath+pathNameSize+1, currentChildRecord->fileRecord->name, childRecordNameSize);
+		recordPath[pathNameSize + childRecordNameSize + 1] = '\n';
+
+		if(currentChildRecord->fileRecord->TypeVal == (BYTE)0x01) {
+			delete2(recordPath);
+		} else if(currentChildRecord->fileRecord->TypeVal == (BYTE)0x02) {
+			rmdir2(recordPath);
+		}
+		free(recordPath);
+
+		currentChildRecord = currentChildRecord->next;
+	}
+	return deleteRecord(pathname);
+}
+
+DIR2 opendir2(char *pathname) {
+	int freeIndex = getFreeDirIndex();
+	if(freeIndex == -1)
+		return -1;
+
+	listaDir2[freeIndex] = (struct t2fs_open_dir*)malloc(sizeof(struct t2fs_open_dir));
+	listaDir2[freeIndex]->currentDirentIndex = 0;
+
+	struct t2fs_record* record = getRecord(pathname);
+	if(record == NULL)
+		return -1;
+
+	listaFile2[freeIndex]->fileRecord = *record;
+
+	return freeIndex;
+}
+
+struct t2fs_record* getNthRecordInRecordList(struct t2fs_record_list* list, int index) {
+	int currentIndex = 0;
+	while(currentIndex < index) {
+		if(list == NULL) return NULL;
+		currentIndex++;
+		list = list->next;
+	}
+
+	if(list == NULL) return NULL;
+	return list->fileRecord;
+}
+
+int readdir2(DIR2 handle, DIRENT2 *dentry) {
+	struct t2fs_record_list* dirEntries = getRecordsInDir(listaDir2[handle]->fileRecord.inodeNumber);
+	struct t2fs_record* dentryRecord = getNthRecordInRecordList(dirEntries, listaDir2[handle]->currentDirentIndex);
+
+	if(dentryRecord == NULL) {
+		return -1;
+	}
+
+	memcpy(dentry->name, dentryRecord->name, strlen(dentryRecord->name));
+	dentry->fileType = dentryRecord->TypeVal;
+	dentry->fileSize = dentryRecord->bytesFileSize;
+
+	return 0;
+}
+
+int closedir2 (DIR2 handle) {
+	free(listaDir2[handle]);
+	listaDir2[handle] = NULL;
+
+	return 0;
+}
+
 
 //TODO: verificar erros das funções implementadas e documentar os contratos

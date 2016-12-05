@@ -37,5 +37,6 @@ void writeInInode(int inodeNumber, unsigned int fileHandle, char* data, int size
 int truncateInode(int inodeNumber, int fromBlockIndex);
 int deleteRecord(char* filePath);
 int updateRecord(char *filePath, struct t2fs_record newRecord);
+struct t2fs_record_list* getRecordsInDir(int inodeNumber);
 
 #endif
