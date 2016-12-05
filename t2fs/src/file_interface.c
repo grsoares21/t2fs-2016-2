@@ -346,7 +346,7 @@ int updateRecord(char *filePath, struct t2fs_record newRecord) {
 
 struct t2fs_record* getRecord(char *path) {
 	char* currentRecName = strtok(path, "/");
-	struct t2fs_record* currentRecord = NULL;
+	struct t2fs_record* currentRecord = (struct t2fs_record*)malloc(sizeof(struct t2fs_record));
 	currentRecord->inodeNumber = 0;
 
 	while (currentRecName != NULL) {
