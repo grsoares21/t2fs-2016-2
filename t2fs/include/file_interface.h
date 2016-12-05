@@ -17,7 +17,7 @@
 =============================================================*/
 
 /*-------------------------------------------------------------
-	Funcaoo que percorre as pastas em disco para encontrar o record apontado pelo caminho "path"
+	Funcao que percorre as pastas em disco para encontrar o record apontado pelo caminho "path"
 Entrada:
 	path -> caminho para o arquivo cujo record deve ser recuperado
 Retorna:
@@ -25,8 +25,14 @@ Retorna:
 	ERRO: NULL
 -------------------------------------------------------------*/
 
-struct t2fs_record getRecord(char *path);
+struct t2fs_record_list {
+	struct t2fs_record* fileRecord;
+	struct t2fs_record_list* next;
+};
 
-
+struct t2fs_record* createRecord(char *path, BYTE type);
+struct t2fs_record* getRecord(char *path);
+char* readFromInode(int inodeNumber, unsigned int fileHandle, int size);
+void writeInInode(int inodeNumber, unsigned int fileHandle, char* data, int size);
 
 #endif

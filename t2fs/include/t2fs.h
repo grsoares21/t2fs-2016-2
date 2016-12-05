@@ -48,10 +48,6 @@ struct t2fs_inode {
     int     doubleIndPtr;   /* Ponteiro de indire��o dupla (little endian) Se inv�lido, recebe INVALID_PTR.    */
 };
 
-struct t2fs_record_list {
-	struct t2fs_record fileRecord;
-	struct t2fs_record_list* next;
-};
 /** Registro com as informa��es da entrada de diret�rio, lida com readdir2 */
 #define MAX_FILE_NAME_SIZE 255
 typedef struct {
