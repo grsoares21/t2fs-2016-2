@@ -8,6 +8,20 @@
 int interfaceInited = 0;
 struct t2fs_superbloco superBlock;
 
+/*=============================================================
+*
+*	FUNCOES AUXILIARES: charToInt4LtlEnd, char2ToShortIntLtlEnd, intToChar4LtlEnd, shortIntToChar2LtlEnd, init;
+*
+=============================================================*/
+DWORD charToInt4LtlEnd(unsigned char* array) {
+	return (DWORD)(array[0]) | (DWORD)(array[1] << 8)
+							| (DWORD)(array[2] << 16) | (DWORD)(array[3] << 24);
+}
+
+WORD char2ToShortIntLtlEnd(unsigned char* array) {
+	return (WORD)(array[0]) | (WORD)(array[1] << 8);
+}
+
 unsigned char* intToChar4LtlEnd(int number) {
 	unsigned char* result = (unsigned char*)malloc(sizeof(unsigned char)*4);
 	result[0] = number;
@@ -18,21 +32,12 @@ unsigned char* intToChar4LtlEnd(int number) {
 	return result;
 }
 
-DWORD charToInt4LtlEnd(unsigned char* array) {
-	return (DWORD)(array[0]) | (DWORD)(array[1] << 8)
-							| (DWORD)(array[2] << 16) | (DWORD)(array[3] << 24);
-}
-
 unsigned char* shortIntToChar2LtlEnd(short int number) {
 	unsigned char* result = (unsigned char*)malloc(sizeof(unsigned char)*2);
 	result[0] = number;
 	result[1] = number >> 8;
 
 	return result;
-}
-
-WORD char2ToShortIntLtlEnd(unsigned char* array) {
-	return (WORD)(array[0]) | (WORD)(array[1] << 8);
 }
 
 int init() {
@@ -57,6 +62,11 @@ int init() {
     return 0;
 }
 
+/*=============================================================
+*
+*	READ MANAGEMENT: getBlock, getInode;
+*
+=============================================================*/
 char* getBlock(int blockNumber) {
     if(init() != 0)
         return NULL;
@@ -100,6 +110,11 @@ struct t2fs_inode* getInode(unsigned int inodeNumber) {
     return inode;
 }
 
+/*=============================================================
+*
+*	WRITE MANAGEMENT: writeBlock, writeInode, writeInBlock;
+*
+=============================================================*/
 int writeBlock(int blockNumber, char data[4096]) {
     if(init() != 0)
         return -1;
@@ -164,9 +179,13 @@ int writeInBlock(int blockNumber, int initialByte, unsigned char* data, int size
     return writeBlock(blockNumber, block);
 }
 
+/*=============================================================
+*
+*	ALLOCATION MANAGEMENT: freeInode, allocateInode, freeBlock, allocateBlock;
+*
+=============================================================*/
 int allocateBlock() {
     int allocBlockNumber = searchBitmap2(1,0);
-    // se der problema pode ser aqui
     if(allocBlockNumber >= 0)
         setBitmap2(1,allocBlockNumber,1);
 
@@ -175,7 +194,6 @@ int allocateBlock() {
 
 int allocateInode() {
     int allocInodeNumber = searchBitmap2(0,0);
-    // se der problema pode ser aqui
     if(allocInodeNumber >= 0)
         setBitmap2(0,allocInodeNumber,1);
 

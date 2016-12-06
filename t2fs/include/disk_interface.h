@@ -1,17 +1,29 @@
 /*
 *
-*	disk_interface: arquivo de inclus�o com os prot�tipos de fun��es a serem implementadas
-*		Cont�m as fun��es necess�rias para a comunica��o com o disco virtual passado pelo professor
+*	disk_interface: arquivo de inclusao com os prototipos de funcoes a serem implementadas
+*		Contem as funcoes necessarias para a comunicacao com o disco virtual passado pelo professor
 *
-*	VERS�O ATUAL: 20161120
+*	VERSAO ATUAL: 20161205
 *
 */
 
 #ifndef __disk_interface__
 #define __disk_interface__
 
+/*=============================================================
+*
+*	FUNCOES AUXILIARES: charToInt4LtlEnd, char2ToShortIntLtlEnd, intToChar4LtlEnd, shortIntToChar2LtlEnd, init;
+*
+=============================================================*/
+
+DWORD charToInt4LtlEnd(unsigned char* array);
+WORD char2ToShortIntLtlEnd(unsigned char* array);
+unsigned char* intToChar4LtlEnd(int number);
+unsigned char* shortIntToChar2LtlEnd(short int number);
+
+
 /*-------------------------------------------------------------
-	Fun��o de inicializa��o da estrutura de superbloco (setor 1 do disco). Deve ser chamada na primeira vez que alguma fun��o da disk_interface for chamada.
+	Funcao de inicializaco da estrutura de superbloco (setor 1 do disco). Deve ser chamada na primeira vez que alguma Funcao da disk_interface for chamada.
 Entrada:
 	NULL
 Retorna:
@@ -22,26 +34,26 @@ int init();
 
 /*=============================================================
 *
-*	READ MANAGEMENT: getInode, getBlock;
+*	READ MANAGEMENT: getBlock, getInode;
 *
 =============================================================*/
 
 /*-------------------------------------------------------------
-	Fun��o que calcula e retorna um ponteiro do tipo char, que conter� os dados lidos do bloco, cujo n�mero foi passado como par�metro
+	Funcao que calcula e retorna um ponteiro do tipo char, que contera os dados lidos do bloco, cujo numero foi passado como parametro
 Entrada:
-	blockNumber -> n�mero do bloco a ser retornado
+	blockNumber -> numero do bloco a ser retornado
 Retorna:
-	SUCESSO: ponteiro para a estrutura de dados que onter� os dados lidos do bloco requerido
+	SUCESSO: ponteiro para a estrutura de dados que ontera os dados lidos do bloco requerido
 	ERRO: NULL
 -------------------------------------------------------------*/
 char* getBlock(int blockNumber);
 
 /*-------------------------------------------------------------
-	Fun��o que calcula e retorna um estrutura inode, cujo n�mero foi passado como para�metro
+	Funcao que calcula e retorna um estrutura inode, cujo numero foi passado como paraametro
 Entrada:
-	inodeNumber -> n�mero do inode a ser retornado
+	inodeNumber -> numero do inode a ser retornado
 Retorna:
-	SUCESSO: estrutura t2fs_inode com os seus respectivos valores j� setados
+	SUCESSO: estrutura t2fs_inode com os seus respectivos valores ja setados
 	ERRO: NULL
 -------------------------------------------------------------*/
 struct t2fs_inode* getInode(unsigned int inodeNumber);
@@ -54,21 +66,21 @@ struct t2fs_inode* getInode(unsigned int inodeNumber);
 =============================================================*/
 
 /*-------------------------------------------------------------
-	Fun��o que reescreve inteiramente o bloco indicado por blockNumber com os dados indicados por data.
+	Funcao que reescreve inteiramente o bloco indicado por blockNumber com os dados indicados por data.
 Entrada:
-	blockNumber -> n�mero do bloco que vai ter suas infoma��es reescritas
+	blockNumber -> numero do bloco que vai ter suas infomaaaes reescritas
 	data -> conjunto de dados a ser escrito no bloco indicado
 Retorna:
-	SUCESSO:
-	ERRO:
+	SUCESSO: 0
+	ERRO: -1
 -------------------------------------------------------------*/
 int writeBlock(int blockNumber, char data[4096]);
 
 
 /*-------------------------------------------------------------
-	Fun��o que reescreve parte do bloco indicado por blockNumber com os dados indicados por data
+	Funcao que reescreve parte do bloco indicado por blockNumber com os dados indicados por data
 Entrada:
-	blockNumber -> n�mero do bloco que vai ter suas informa��es reescritas
+	blockNumber -> numero do bloco que vai ter suas informaaaes reescritas
 	initialByte -> ?
 	data -> conjunto de dados a ser escrito no bloco indicado
 	size -> ?
@@ -80,9 +92,9 @@ int writeInBlock(int blockNumber, int initialByte, unsigned char* data, int size
 
 
 /*-------------------------------------------------------------
-	Fun��o que atualiza um inode, cujo n�mero � passado por inodeNumber, com as informa��es de inode
+	Funcao que atualiza um inode, cujo numero sera passado por inodeNumber, com as informaaaes de inode
 Entrada:
-	inodeNumber -> n�mero do inode que ser� atualizado
+	inodeNumber -> numero do inode que sera atualizado
 	inode -> estrutura do tipo inode
 Retorna:
 	SUCESSO: 0
@@ -98,29 +110,29 @@ int writeInode(int inodeNumber, struct t2fs_inode inode);
 =============================================================*/
 
 /*-------------------------------------------------------------
-	Fun��o que atualiza o bit indicado por blockNumber para um, ou seja, aloca o bloco
+	Funcao que atualiza o bit indicado por blockNumber para um, ou seja, aloca o bloco
 Entrada:
-	blockNumber -> n�mero do bloco que ser� atualizado/liberado
+	blockNumber -> numero do bloco que sera atualizado/liberado
 Retorna:
 	SUCESSO: 0
 	ERRO: qualquer valor diferente de zero
 -------------------------------------------------------------*/
 int allocateBlock();
 
-/*-------------------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	Fun��o que atualiza o bit indicado por inodeNumber para um, ou seja, aloca o inode
+/*-------------------------------------------------------------
+	Funcao que atualiza o bit indicado por inodeNumber para um, ou seja, aloca o inode
 Entrada:
-	inodeNumber -> n�mero do inode que ser� atualizado/liberado
+	inodeNumber -> numero do inode que sera atualizado/liberado
 Retorna:
 	SUCESSO: 0
 	ERRO: qualquer valor diferente de zero
--------------------------------------------------------------!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!*/
+-------------------------------------------------------------*/
 int allocateInode();
 
 /*-------------------------------------------------------------
-	Fun��o que atualiza o bit indicado por blockNumber para zero, ou seja, libera o bloco
+	Funcao que atualiza o bit indicado por blockNumber para zero, ou seja, libera o bloco
 Entrada:
-	blockNumber -> n�mero do bloco que ser� atualizado/liberado
+	blockNumber -> numero do bloco que sera atualizado/liberado
 Retorna:
 	SUCESSO: 0
 	ERRO: qualquer valor diferente de zero
@@ -128,16 +140,13 @@ Retorna:
 int freeBlock(int blockNumber);
 
 /*-------------------------------------------------------------
-	Fun��o que atualiza o bit indicado por inodeNumber para zero, ou seja, libera o inode
+	Funcao que atualiza o bit indicado por inodeNumber para zero, ou seja, libera o inode
 Entrada:
-	inodeNumber -> n�mero do inode que ser� atualizado/liberado
+	inodeNumber -> numero do inode que sera atualizado/liberado
 Retorna:
 	SUCESSO: 0
 	ERRO: qualquer valor diferente de zero
 -------------------------------------------------------------*/
 int freeInode(int inodeNumber);
-
-unsigned char* intToChar4LtlEnd(int number);
-unsigned int charToInt4LtlEnd(unsigned char* array);
 
 #endif

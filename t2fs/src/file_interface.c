@@ -5,78 +5,11 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-/*------ FUNCOES AUXILIARES-------
-	Regiao do codigo que possui apenas funcoes auxiliares utilizadas exclusivamente pela file_interface.
-	Estas funcoes nao sao expostas no header.
- ----------------------------------*/
-
-
-int getNthIntegerFromBlock(char* block, int index) {
-	char* integerBytes = (char*)malloc(sizeof(char)*4);
-
-	integerBytes = (char*)memcpy(integerBytes, block + (index*4), 4);
-	uint32_t integer = (uint32_t)(integerBytes[0]) | (uint32_t)(integerBytes[1] << 8)
-							| (uint32_t)(integerBytes[2] << 16) | (uint32_t)(integerBytes[3] << 24);
-	//this order works considering the bytes are in little-endian format
-	free(integerBytes);
-
-	return integer;
-}
-
-int min(int a, int b) {
-	if(a < b) {
-		return a;
-	} else {
-		return b;
-	}
-}
-
-int getNthBlockNumberInInode(struct t2fs_inode inode, int index) {
-	if(index < 2) {
-		return inode.dataPtr[index];
-
-	} else if(index < 1026) {
-		if(inode.singleIndPtr != INVALID_PTR) {
-			char* singleIndBlock = getBlock(inode.singleIndPtr);
-			int singleIndIndex = index - 2;
-			int blockNumber = getNthIntegerFromBlock(singleIndBlock, singleIndIndex);
-			//this order works considering the bytes are in little-endian format
-			free(singleIndBlock);
-
-			return blockNumber;
-		} else {
-			return INVALID_PTR;
-		}
-	} else {
-		if(inode.doubleIndPtr != INVALID_PTR) {
-			int firstIndIndex = (index - 1026) / 1024;
-			int secondIndIndex = (index - 1026) - (firstIndIndex * 1024);
-
-			char* firstIndBlock = getBlock(inode.doubleIndPtr);
-			int secondIndBlockNumber = getNthIntegerFromBlock(firstIndBlock, firstIndIndex);
-			free(firstIndBlock);
-			if(secondIndBlockNumber != INVALID_PTR) {
-				char* secondIndBlock = getBlock(secondIndBlockNumber);
-				int blockNumber = getNthIntegerFromBlock(secondIndBlock, secondIndIndex);
-
-				free(secondIndBlock);
-				return blockNumber;
-			} else {
-				return INVALID_PTR;
-			}
-		} else {
-			return INVALID_PTR;
-		}
-	}
-}
-
-char* getNthBlockInInode(struct t2fs_inode inode, int index) {
-	int blockNumber = getNthBlockNumberInInode(inode, index);
-	if(blockNumber != INVALID_PTR) {
-		return getBlock(blockNumber);
-	}
-	return NULL;
-}
+/*=============================================================
+*
+*	FUNCOES AUXILIARES: allocateBlockForInode, getNthIntegerFromBlock, getFatherDirInode, min;
+*
+=============================================================*/
 
 void allocateBlockForInode(int inodeNumber, int blockIndex) {
 	int allocatedBlockNumber = allocateBlock();
@@ -128,9 +61,89 @@ void allocateBlockForInode(int inodeNumber, int blockIndex) {
 	return;
 }
 
-/*------ FUNCOES DA INTERFACE ------
-	Regiao do codigo que possui as funcoes da file_interface e que estao expostas no header.
-----------------------------*/
+int getNthIntegerFromBlock(char* block, int index) {
+	char* integerBytes = (char*)malloc(sizeof(char)*4);
+
+	integerBytes = (char*)memcpy(integerBytes, block + (index*4), 4);
+	uint32_t integer = (uint32_t)(integerBytes[0]) | (uint32_t)(integerBytes[1] << 8)
+							| (uint32_t)(integerBytes[2] << 16) | (uint32_t)(integerBytes[3] << 24);
+	//this order works considering the bytes are in little-endian format
+	free(integerBytes);
+
+	return integer;
+}
+
+struct t2fs_inode* getFatherDirInode(char* path) {
+    char* originalPath = (char*)malloc(sizeof(char)*(strlen(path)+1));
+    memcpy(originalPath, path, strlen(path)+1);
+
+	char* prevName = strtok(path, "/");
+	char* fileName = NULL;
+	while(prevName != NULL) {
+		fileName = prevName;
+		prevName = strtok(NULL, "/");
+	}
+
+	int dirPathSize = strlen(originalPath) - strlen(fileName);
+	char* dirPath = (char*)malloc(sizeof(char)*(dirPathSize+1));
+    dirPath[dirPathSize] = '\0';
+	memcpy(dirPath, originalPath, dirPathSize);
+
+    if(strcmp(dirPath, "/") == 0) {
+        return getInode(0);
+    } else {
+        struct t2fs_record* dirRecord = getRecord(dirPath);
+        return getInode(dirRecord->inodeNumber);
+    }
+}
+
+int min(int a, int b) {
+	if(a < b) {
+		return a;
+	} else {
+		return b;
+	}
+}
+
+/*=============================================================
+*
+*	RECORD MANAGEMENT: getRecord, getRecordsInDir, createRecord, deleteRecord, updateRecord;
+*
+=============================================================*/
+
+/*-------------------------------------------------------------
+	Funcao que percorre as pastas em disco para encontrar o record apontado pelo caminho "path"
+Entrada:
+	path -> caminho para o arquivo cujo record deve ser recuperado
+Retorna:
+	SUCESSO: ponteiro para uma estrutura t2fs_record contendo o record do arquivo apontado por "path"
+	ERRO: NULL
+-------------------------------------------------------------*/
+struct t2fs_record* getRecord(char *path) {
+	char* currentRecName = strtok(path, "/");
+	struct t2fs_record* currentRecord = (struct t2fs_record*)malloc(sizeof(struct t2fs_record));
+	currentRecord->inodeNumber = 0;
+	char rootName[32] = "/";
+	memcpy(currentRecord->name, rootName, 32);
+    char* prevName = "/";
+	while (currentRecName != NULL) {
+		struct t2fs_record_list* currentList = getRecordsInDir(currentRecord->inodeNumber);
+		while(currentList != NULL) {
+			if(strcmp(currentList->fileRecord->name, currentRecName) == 0) {
+				currentRecord = currentList->fileRecord;
+				break;
+			}
+			currentList = currentList->next;
+		}
+        prevName = currentRecName;
+		currentRecName = strtok(NULL, "/");
+	}
+	if(strcmp(currentRecord->name, prevName) != 0)
+        return NULL;
+
+	return currentRecord;
+}
+
 struct t2fs_record_list* getRecordsInDir(int inodeNumber) {
 	struct t2fs_inode* inode = getInode(inodeNumber);
 	struct t2fs_record_list* list = NULL;
@@ -181,6 +194,9 @@ struct t2fs_record_list* getRecordsInDir(int inodeNumber) {
 }
 
 struct t2fs_record* createRecord(char *path, BYTE type) {
+    char* originalPath = (char*)malloc(sizeof(char)*(strlen(path)+1));
+    memcpy(originalPath, path, strlen(path)+1);
+
 	struct t2fs_record* record = (struct t2fs_record*)malloc(sizeof(struct t2fs_record));
 	char* prevName = strtok(path, "/");
 	char* fileName;
@@ -191,11 +207,12 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 	memcpy(record->name, fileName, 31);
 	record->name[31] = '\0';
 
-	struct t2fs_inode* dirInode = getFatherDirInode(path);
+	struct t2fs_inode* dirInode = getFatherDirInode(originalPath);
 
 	int currentBlockIndex = 0;
 	char* currentBlock = getNthBlockInInode(*dirInode, currentBlockIndex);
 	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
+
 	while(currentBlock != NULL) {
 		int currentInBlockIndex;
 		for(currentInBlockIndex = 0; currentInBlockIndex < 4096; currentInBlockIndex += 64) {
@@ -214,7 +231,6 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
                 unsigned char* inodeNumberLtlEnd = intToChar4LtlEnd(newInodeNumber);
 				memcpy(currentBlock+currentInBlockIndex+41, inodeNumberLtlEnd, 4);
 				free(inodeNumberLtlEnd);
-
 
 				writeBlock(currentBlockNumber, currentBlock);
 
@@ -235,30 +251,12 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 	return NULL;
 }
 
-struct t2fs_inode* getFatherDirInode(char* path) {
-	char* prevName = strtok(path, "/");
-	char* fileName = NULL;
-	while(prevName != NULL) {
-		fileName = prevName;
-		prevName = strtok(NULL, "/");
-	}
-
-	int dirPathSize = strlen(path) - strlen(fileName);
-	char* dirPath = (char*)malloc(sizeof(char)*(dirPathSize+1));
-    dirPath[dirPathSize] = '\0';
-	memcpy(dirPath, path, dirPathSize);
-
-    if(strcmp(dirPath, "/") == 0) {
-        return getInode(0);
-    } else {
-        struct t2fs_record* dirRecord = getRecord(dirPath);
-        return getInode(dirRecord->inodeNumber);
-    }
-}
-
 int deleteRecord(char* filePath) {
+    char* originalPath = (char*)malloc(sizeof(char)*(strlen(filePath)+1));
+    memcpy(originalPath, filePath, strlen(filePath)+1);
+
 	struct t2fs_record* fileRecord = getRecord(filePath);
-	struct t2fs_inode* dirInode = getFatherDirInode(filePath);
+	struct t2fs_inode* dirInode = getFatherDirInode(originalPath);
 
 	int currentBlockIndex = 0;
 	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
@@ -285,9 +283,12 @@ int deleteRecord(char* filePath) {
 }
 
 int updateRecord(char *filePath, struct t2fs_record newRecord) {
+    char* originalPath = (char*)malloc(sizeof(char)*(strlen(filePath)+1));
+    memcpy(originalPath, filePath, strlen(filePath)+1);
+
 	struct t2fs_inode* dirInode = getFatherDirInode(filePath);
 
-	char* prevName = strtok(filePath, "/");
+	char* prevName = strtok(originalPath, "/");
 	char* fileName;
 	while(prevName != NULL) {
 		fileName = prevName;
@@ -312,7 +313,7 @@ int updateRecord(char *filePath, struct t2fs_record newRecord) {
 
 				unsigned char* bytesSizeLtlEnd = intToChar4LtlEnd(newRecord.bytesFileSize);
 				memcpy(currentBlock+currentInBlockIndex+37, bytesSizeLtlEnd, 4);
-				free(blocksSizeLtlEnd);
+				free(bytesSizeLtlEnd);
 
 				unsigned char* inodeNumberLtlEnd = intToChar4LtlEnd(newRecord.inodeNumber);
 				memcpy(currentBlock+currentInBlockIndex+41, inodeNumberLtlEnd, 4);
@@ -332,29 +333,79 @@ int updateRecord(char *filePath, struct t2fs_record newRecord) {
 	return -1;
 }
 
-
-struct t2fs_record* getRecord(char *path) {
-	char* currentRecName = strtok(path, "/");
-	struct t2fs_record* currentRecord = (struct t2fs_record*)malloc(sizeof(struct t2fs_record));
-	currentRecord->inodeNumber = 0;
-
-	while (currentRecName != NULL) {
-		struct t2fs_record_list* currentList = getRecordsInDir(currentRecord->inodeNumber);
-		while(currentList != NULL) {
-			if(strcmp(currentList->fileRecord->name, currentRecName) == 0) {
-				currentRecord = currentList->fileRecord;
-				break;
-			}
-			currentList = currentList->next;
-		}
-
-		currentRecName = strtok(NULL, "/");
+/*=============================================================
+*
+*	INODE MANAGEMENT: getNthBlockInInode, getNthBlockNumberInInode, readFromInode, truncateInode, writeInInode;
+*
+=============================================================*/
+char* getNthBlockInInode(struct t2fs_inode inode, int index) {
+	int blockNumber = getNthBlockNumberInInode(inode, index);
+	if(blockNumber != INVALID_PTR) {
+		return getBlock(blockNumber);
 	}
+	return NULL;
+}
 
-	if(currentRecord->inodeNumber == 0)
+int getNthBlockNumberInInode(struct t2fs_inode inode, int index) {
+	if(index < 2) {
+		return inode.dataPtr[index];
+
+	} else if(index < 1026) {
+		if(inode.singleIndPtr != INVALID_PTR) {
+			char* singleIndBlock = getBlock(inode.singleIndPtr);
+			int singleIndIndex = index - 2;
+			int blockNumber = getNthIntegerFromBlock(singleIndBlock, singleIndIndex);
+			//this order works considering the bytes are in little-endian format
+			free(singleIndBlock);
+
+			return blockNumber;
+		} else {
+			return INVALID_PTR;
+		}
+	} else {
+		if(inode.doubleIndPtr != INVALID_PTR) {
+			int firstIndIndex = (index - 1026) / 1024;
+			int secondIndIndex = (index - 1026) - (firstIndIndex * 1024);
+
+			char* firstIndBlock = getBlock(inode.doubleIndPtr);
+			int secondIndBlockNumber = getNthIntegerFromBlock(firstIndBlock, firstIndIndex);
+			free(firstIndBlock);
+			if(secondIndBlockNumber != INVALID_PTR) {
+				char* secondIndBlock = getBlock(secondIndBlockNumber);
+				int blockNumber = getNthIntegerFromBlock(secondIndBlock, secondIndIndex);
+
+				free(secondIndBlock);
+				return blockNumber;
+			} else {
+				return INVALID_PTR;
+			}
+		} else {
+			return INVALID_PTR;
+		}
+	}
+}
+
+char* readFromInode(int inodeNumber, unsigned int fileHandle, int size) {
+    if(inodeNumber == INVALID_PTR || size < 1)
         return NULL;
 
-	return currentRecord;
+	struct t2fs_inode* inode = getInode(inodeNumber);
+	int firstBlockIndex = (int)fileHandle / 4096;
+	int numberOfBlocks = (size / 4096) + 1;
+
+	char* blocksData = (char*)malloc(sizeof(char)*4096*numberOfBlocks);
+	char* finalData = (char*)malloc(sizeof(char)*size);
+
+	int i;
+	//le todos os blocos e guarda em blockData
+	for(i = firstBlockIndex; i < firstBlockIndex + numberOfBlocks; i++) {
+		char* currentBlockData = getNthBlockInInode(*inode, i);
+		memcpy(blocksData + (4096*(i - firstBlockIndex)), currentBlockData, 4096);
+		free(currentBlockData);
+	}
+	memcpy(finalData, blocksData + (fileHandle - (4096*firstBlockIndex)), size);
+
+	return finalData;
 }
 
 int truncateInode(int inodeNumber, int fromBlockIndex) {
@@ -414,36 +465,13 @@ int truncateInode(int inodeNumber, int fromBlockIndex) {
 	return 0;
 }
 
-char* readFromInode(int inodeNumber, unsigned int fileHandle, int size) {
-    if(inodeNumber == INVALID_PTR || size < 1)
-        return NULL;
-
-	struct t2fs_inode* inode = getInode(inodeNumber);
-	int firstBlockIndex = (int)fileHandle / 4096;
-	int numberOfBlocks = (size / 4096) + 1;
-
-	char* blocksData = (char*)malloc(sizeof(char)*4096*numberOfBlocks);
-	char* finalData = (char*)malloc(sizeof(char)*size);
-
-	int i;
-	//le todos os blocos e guarda em blockData
-	for(i = firstBlockIndex; i < firstBlockIndex + numberOfBlocks; i++) {
-		char* currentBlockData = getNthBlockInInode(*inode, i);
-		memcpy(blocksData + (4096*(i - firstBlockIndex)), currentBlockData, 4096);
-		free(currentBlockData);
-	}
-	memcpy(finalData, blocksData + (fileHandle - (4096*firstBlockIndex)), size);
-
-	return finalData;
-}
-
 void writeInInode(int inodeNumber, unsigned int fileHandle, char* data, int size) {
 	struct t2fs_inode* inode = getInode(inodeNumber);
 	int writtenBytes = 0;
 
 	while(writtenBytes < size) {
 		int currentBlockIndex = ((int)fileHandle + writtenBytes) / 4096;
-		int currentInBlockIndex = ((int)fileHandle + writtenBytes) - (currentInBlockIndex * 4096);
+		int currentInBlockIndex = ((int)fileHandle + writtenBytes) - (currentBlockIndex * 4096);
 
 		int currentBlockNumber = getNthBlockNumberInInode(*inode, currentBlockIndex);
 		if(currentBlockNumber == INVALID_PTR) {

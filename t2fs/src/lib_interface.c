@@ -9,10 +9,16 @@ struct t2fs_open_dir* listaDir2[20];
 struct t2fs_open_file* listaFile2[20];
 
 int identify2(char *name, int size)
-{	//TODO add jessica's and bharbara's ids
+{
   	strncpy(name, "Bharbara Cechin - 240430\nGabriel Restori Soares - 217436\nJessica Lorencetti - 228342", (size_t)size);
     return 0;
 }
+
+/*=============================================================
+*
+*	FUNCOES AUXILIARES: getFreeDirIndex, getFreeFileIndex, getNthRecordInRecordList;
+*
+=============================================================*/
 
 int getFreeDirIndex() {
 	int i;
@@ -34,25 +40,69 @@ int getFreeFileIndex() {
 	return -1;
 }
 
+struct t2fs_record* getNthRecordInRecordList(struct t2fs_record_list* list, int index) {
+	int currentIndex = 0;
+	while(currentIndex < index) {
+		if(list == NULL) return NULL;
+		currentIndex++;
+		list = list->next;
+	}
+
+	if(list == NULL) return NULL;
+	return list->fileRecord;
+}
+
+/*=============================================================
+*
+*	FILE LIBRARY: close2, create2, delete2, open2, read2, seek2, truncate2, write2;
+*
+=============================================================*/
+
+int close2 (FILE2 handle) {
+    if(listaFile2[handle] == NULL) {
+        return -1;
+    }
+
+	free(listaFile2[handle]);
+	listaFile2[handle] = NULL;
+
+	return 0;
+}
+
 FILE2 create2 (char *filename) {
+    char* firstPathCpy = (char*)malloc(sizeof(char)*(strlen(filename) + 1));
+    char* secondPathCpy = (char*)malloc(sizeof(char)*(strlen(filename) + 1));
+    memcpy(firstPathCpy, filename, strlen(filename)+1);
+    memcpy(secondPathCpy, filename, strlen(filename)+1);
+    //usados pois as strok usadas dentros das funcoes alteram as strings originais
+
 	int freeIndex = getFreeFileIndex();
 	if(freeIndex == -1)
 		return -1;
+    if(getRecord(filename) != NULL)
+        return -1;
 
 	listaFile2[freeIndex] = (struct t2fs_open_file*)malloc(sizeof(struct t2fs_open_file));
 	listaFile2[freeIndex]->handle = 0;
-	//TODO: verificar se o arquivo ja existe
-	struct t2fs_record* newRecord = createRecord(filename, (BYTE)0x01);
+
+	struct t2fs_record* newRecord = createRecord(firstPathCpy, (BYTE)0x01);
 	listaFile2[freeIndex]->fileRecord = *newRecord;
 
-    listaFile2[freeIndex]->filePath = (char*)malloc(sizeof(char)*(strlen(filename)+1));
-	memcpy(listaFile2[freeIndex]->filePath, filename, strlen(filename));
-	listaFile2[freeIndex]->filePath[strlen(filename)] = '\0';
+    listaFile2[freeIndex]->filePath = (char*)malloc(sizeof(char)*(strlen(secondPathCpy)+1));
+	memcpy(listaFile2[freeIndex]->filePath, secondPathCpy, strlen(secondPathCpy));
+	listaFile2[freeIndex]->filePath[strlen(secondPathCpy)] = '\0';
 
 	return freeIndex;
 }
 
+int delete2 (char *filename) {
+	return deleteRecord(filename);
+}
+
 FILE2 open2 (char *filename) {
+    char* originalPath = (char*)malloc(sizeof(char)*(strlen(filename) + 1));
+    memcpy(originalPath, filename, strlen(filename)+1);
+
 	int freeIndex = getFreeFileIndex();
 	if(freeIndex == -1)
 		return -1;
@@ -64,23 +114,12 @@ FILE2 open2 (char *filename) {
 	listaFile2[freeIndex] = (struct t2fs_open_file*)malloc(sizeof(struct t2fs_open_file));
 	listaFile2[freeIndex]->handle = 0;
 	listaFile2[freeIndex]->filePath = (char*)malloc(sizeof(char)*(strlen(filename)+1));
-	memcpy(listaFile2[freeIndex]->filePath, filename, strlen(filename));
-	listaFile2[freeIndex]->filePath[strlen(filename)] = '\0';
+	memcpy(listaFile2[freeIndex]->filePath, originalPath, strlen(originalPath));
+	listaFile2[freeIndex]->filePath[strlen(originalPath)] = '\0';
 
 	listaFile2[freeIndex]->fileRecord = *record;
 
 	return freeIndex;
-}
-
-int close2 (FILE2 handle) {
-    if(listaFile2[handle] == NULL) {
-        return -1;
-    }
-
-	free(listaFile2[handle]);
-	listaFile2[handle] = NULL;
-
-	return 0;
 }
 
 int read2 (FILE2 handle, char *buffer, int size) {
@@ -100,6 +139,21 @@ int read2 (FILE2 handle, char *buffer, int size) {
 	return bytesToRead;
 }
 
+int seek2(FILE2 handle, unsigned int offset) {
+	listaFile2[handle]->handle = offset;
+
+	return 0;
+}
+
+int truncate2(FILE2 handle) {
+	struct t2fs_open_file* file = listaFile2[handle];
+	file->fileRecord.bytesFileSize = file->handle;
+	file->fileRecord.blocksFileSize = (file->handle / 4096) + 1;
+
+	truncateInode(file->fileRecord.inodeNumber, file->fileRecord.blocksFileSize);
+	return updateRecord(file->filePath, file->fileRecord);
+}
+
 int write2 (FILE2 handle, char *buffer, int size) {
     if(listaFile2[handle] == NULL) {
         return -1;
@@ -117,30 +171,63 @@ int write2 (FILE2 handle, char *buffer, int size) {
 	return size;
 }
 
-int seek2(FILE2 handle, unsigned int offset) {
-	listaFile2[handle]->handle = offset;
+/*=============================================================
+*
+*	DIRECTORY LIBRARY: closedir2, mkdir2, opendir2, readdir2, rmdir2;
+*
+=============================================================*/
+
+int closedir2 (DIR2 handle) {
+	free(listaDir2[handle]);
+	listaDir2[handle] = NULL;
 
 	return 0;
 }
 
-int delete2 (char *filename) {
-	return deleteRecord(filename);
-}
-
-int truncate2(FILE2 handle) {
-	struct t2fs_open_file* file = listaFile2[handle];
-	file->fileRecord.bytesFileSize = file->handle;
-	file->fileRecord.blocksFileSize = (file->handle / 4096) + 1;
-
-	truncateInode(file->fileRecord.inodeNumber, file->fileRecord.blocksFileSize);
-	return updateRecord(file->filePath, file->fileRecord);
-}
-
 int mkdir2 (char *pathname) {
- 	if(createRecord(pathname, (BYTE)0x02) != NULL) {
+    char* originalPath = (char*)malloc(sizeof(char)*(strlen(pathname)+1));
+    memcpy(originalPath, pathname, strlen(pathname)+1);
+
+    struct t2fs_record* record = createRecord(pathname, (BYTE)0x02);
+ 	if(record != NULL) {
+        allocateBlockForInode(record->inodeNumber, 0);
+        record->blocksFileSize = 1;
+        record->bytesFileSize = 4096;
+        updateRecord(originalPath, *record);
 		return 0;
 	}
 	return -1;
+}
+
+DIR2 opendir2(char *pathname) {
+	int freeIndex = getFreeDirIndex();
+	if(freeIndex == -1)
+		return -1;
+
+	listaDir2[freeIndex] = (struct t2fs_open_dir*)malloc(sizeof(struct t2fs_open_dir));
+	listaDir2[freeIndex]->currentDirentIndex = 0;
+
+	struct t2fs_record* record = getRecord(pathname);
+	if(record == NULL)
+		return -1;
+
+	listaDir2[freeIndex]->fileRecord = *record;
+
+	return freeIndex;
+}
+
+int readdir2(DIR2 handle, DIRENT2 *dentry) {
+	struct t2fs_record_list* dirEntries = getRecordsInDir(listaDir2[handle]->fileRecord.inodeNumber);
+	struct t2fs_record* dentryRecord = getNthRecordInRecordList(dirEntries, (listaDir2[handle]->currentDirentIndex)++);
+	if(dentryRecord == NULL) {
+		return -1;
+	}
+
+	memcpy(dentry->name, dentryRecord->name, strlen(dentryRecord->name)+1);
+	dentry->fileType = dentryRecord->TypeVal;
+	dentry->fileSize = dentryRecord->bytesFileSize;
+
+	return 0;
 }
 
 int rmdir2 (char *pathname) {
@@ -166,56 +253,3 @@ int rmdir2 (char *pathname) {
 	}
 	return deleteRecord(pathname);
 }
-
-DIR2 opendir2(char *pathname) {
-	int freeIndex = getFreeDirIndex();
-	if(freeIndex == -1)
-		return -1;
-
-	listaDir2[freeIndex] = (struct t2fs_open_dir*)malloc(sizeof(struct t2fs_open_dir));
-	listaDir2[freeIndex]->currentDirentIndex = 0;
-
-	struct t2fs_record* record = getRecord(pathname);
-	if(record == NULL)
-		return -1;
-
-	listaDir2[freeIndex]->fileRecord = *record;
-
-	return freeIndex;
-}
-
-struct t2fs_record* getNthRecordInRecordList(struct t2fs_record_list* list, int index) {
-	int currentIndex = 0;
-	while(currentIndex < index) {
-		if(list == NULL) return NULL;
-		currentIndex++;
-		list = list->next;
-	}
-
-	if(list == NULL) return NULL;
-	return list->fileRecord;
-}
-
-int readdir2(DIR2 handle, DIRENT2 *dentry) {
-	struct t2fs_record_list* dirEntries = getRecordsInDir(listaDir2[handle]->fileRecord.inodeNumber);
-	struct t2fs_record* dentryRecord = getNthRecordInRecordList(dirEntries, (listaDir2[handle]->currentDirentIndex)++);
-	if(dentryRecord == NULL) {
-		return -1;
-	}
-
-	memcpy(dentry->name, dentryRecord->name, strlen(dentryRecord->name));
-	dentry->fileType = dentryRecord->TypeVal;
-	dentry->fileSize = dentryRecord->bytesFileSize;
-
-	return 0;
-}
-
-int closedir2 (DIR2 handle) {
-	free(listaDir2[handle]);
-	listaDir2[handle] = NULL;
-
-	return 0;
-}
-
-
-//TODO: verificar erros das funções implementadas e documentar os contratos
