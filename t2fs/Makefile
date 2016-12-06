@@ -15,7 +15,7 @@ BIN_DIR=./bin
 SRC_DIR=./src
 
 all: disk_interface_compile file_interface_compile lib_interface_compile
-	ar rvs $(LIB_DIR)/libt2fs.a $(BIN_DIR)/*.o
+	ar rvs $(LIB_DIR)/libt2fs.a $(BIN_DIR)/*.o $(LIB_DIR)/*.o
 
 disk_interface_compile:
 	$(CC) -o $(BIN_DIR)/disk_interface.o $(SRC_DIR)/disk_interface.c -Wall -c
