@@ -159,10 +159,10 @@ struct t2fs_record_list* getRecordsInDir(int inodeNumber) {
 			memcpy(currentRecord->fileRecord->name, currentBlock + currentInBlockIndex + 1, 31);
 			currentRecord->fileRecord->name[31] = '\0';
 
-			DWORD blocksFileSize = charToInt4LtlEnd(currentBlock+currentInBlockIndex+33);
-			DWORD bytesFileSize = charToInt4LtlEnd(currentBlock+currentInBlockIndex+37);
+			DWORD blocksFileSize = charToInt4LtlEnd((unsigned char*)(currentBlock+currentInBlockIndex+33));
+			DWORD bytesFileSize = charToInt4LtlEnd((unsigned char*)(currentBlock+currentInBlockIndex+37));
 
-			DWORD iNumber = charToInt4LtlEnd(currentBlock+currentInBlockIndex+41);
+			DWORD iNumber = charToInt4LtlEnd((unsigned char*)(currentBlock+currentInBlockIndex+41));
 
 			currentRecord->fileRecord->blocksFileSize = blocksFileSize;
 			currentRecord->fileRecord->bytesFileSize = bytesFileSize;
@@ -191,41 +191,44 @@ struct t2fs_record* createRecord(char *path, BYTE type) {
 	memcpy(record->name, fileName, 31);
 	record->name[31] = '\0';
 
-	int dirPathSize = strlen(path) - strlen(fileName);
-
-	char* dirPath = (char*)malloc(sizeof(char)*dirPathSize);
-	memcpy(dirPath, path, dirPathSize);
-
-	struct t2fs_record* dirRecord = getRecord(dirPath);
-	struct t2fs_inode* dirInode = getInode(dirRecord->inodeNumber);
+	struct t2fs_inode* dirInode = getFatherDirInode(path);
 
 	int currentBlockIndex = 0;
 	char* currentBlock = getNthBlockInInode(*dirInode, currentBlockIndex);
+	int currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
 	while(currentBlock != NULL) {
 		int currentInBlockIndex;
 		for(currentInBlockIndex = 0; currentInBlockIndex < 4096; currentInBlockIndex += 64) {
 			BYTE recordType = (BYTE)currentBlock[currentInBlockIndex];
 			if(recordType == (BYTE)0x00) { //registro livre
 				currentBlock[currentInBlockIndex] = (char)type;
-				memcpy(currentBlock+currentBlockIndex+1, fileName, strlen(fileName));
+				memcpy(currentBlock+currentInBlockIndex+1, fileName, strlen(fileName));
 				currentBlock[currentInBlockIndex+1+strlen(fileName)] = '\0';
 
 				int sizeBytesIndex;
-				for(sizeBytesIndex = currentInBlockIndex+32; sizeBytesIndex < currentInBlockIndex+40; sizeBytesIndex++) {
+				for(sizeBytesIndex = currentInBlockIndex+33; sizeBytesIndex < currentInBlockIndex+41; sizeBytesIndex++) {
 					currentBlock[sizeBytesIndex] = 0;
 				}
 				int newInodeNumber = allocateInode();
 
-				currentBlock[40] = newInodeNumber;
-				currentBlock[41] = newInodeNumber >> 8;
-				currentBlock[42] = newInodeNumber >> 16;
-				currentBlock[43] = newInodeNumber >> 24;
+                unsigned char* inodeNumberLtlEnd = intToChar4LtlEnd(newInodeNumber);
+				memcpy(currentBlock+currentInBlockIndex+41, inodeNumberLtlEnd, 4);
+				free(inodeNumberLtlEnd);
 
-				writeBlock(getNthBlockNumberInInode(*dirInode, currentBlockIndex), currentBlock);
+
+				writeBlock(currentBlockNumber, currentBlock);
+
+				record->TypeVal = type;
+				record->inodeNumber = newInodeNumber;
+				memcpy(record->name, fileName, strlen(fileName));
+				record->blocksFileSize = 0;
+				record->bytesFileSize = 0;
+
 				return record;
 			}
 		}
 		currentBlockIndex++;
+		currentBlockNumber = getNthBlockNumberInInode(*dirInode, currentBlockIndex);
 		currentBlock = getNthBlockInInode(*dirInode, currentBlockIndex);
 	}
 
@@ -300,19 +303,19 @@ int updateRecord(char *filePath, struct t2fs_record newRecord) {
 		for(currentInBlockIndex = 0; currentInBlockIndex < 4096; currentInBlockIndex += 64) {
 			if(strcmp(currentBlock+currentInBlockIndex+1, fileName) == 0) {
 				currentBlock[currentInBlockIndex] = newRecord.TypeVal;
-				memcpy(currentBlock+currentBlockIndex+1, newRecord.name, strlen(newRecord.name));
+				memcpy(currentBlock+currentInBlockIndex+1, newRecord.name, strlen(newRecord.name));
 				currentBlock[currentInBlockIndex+1+strlen(newRecord.name)] = '\0';
 
-				char* blocksSizeLtlEnd = intToChar4LtlEnd(newRecord.blocksFileSize);
-				memcpy(currentBlock+currentInBlockIndex+32, blocksSizeLtlEnd, 4);
+				unsigned char* blocksSizeLtlEnd = intToChar4LtlEnd(newRecord.blocksFileSize);
+				memcpy(currentBlock+currentInBlockIndex+33, blocksSizeLtlEnd, 4);
 				free(blocksSizeLtlEnd);
 
-				char* bytesSizeLtlEnd = intToChar4LtlEnd(newRecord.bytesFileSize);
-				memcpy(currentBlock+currentInBlockIndex+36, bytesSizeLtlEnd, 4);
+				unsigned char* bytesSizeLtlEnd = intToChar4LtlEnd(newRecord.bytesFileSize);
+				memcpy(currentBlock+currentInBlockIndex+37, bytesSizeLtlEnd, 4);
 				free(blocksSizeLtlEnd);
 
-				char* inodeNumberLtlEnd = intToChar4LtlEnd(newRecord.inodeNumber);
-				memcpy(currentBlock+currentInBlockIndex+40, inodeNumberLtlEnd, 4);
+				unsigned char* inodeNumberLtlEnd = intToChar4LtlEnd(newRecord.inodeNumber);
+				memcpy(currentBlock+currentInBlockIndex+41, inodeNumberLtlEnd, 4);
 				free(inodeNumberLtlEnd);
 
 				writeBlock(currentBlockNumber, currentBlock);
@@ -347,6 +350,10 @@ struct t2fs_record* getRecord(char *path) {
 
 		currentRecName = strtok(NULL, "/");
 	}
+
+	if(currentRecord->inodeNumber == 0)
+        return NULL;
+
 	return currentRecord;
 }
 
@@ -408,6 +415,9 @@ int truncateInode(int inodeNumber, int fromBlockIndex) {
 }
 
 char* readFromInode(int inodeNumber, unsigned int fileHandle, int size) {
+    if(inodeNumber == INVALID_PTR || size < 1)
+        return NULL;
+
 	struct t2fs_inode* inode = getInode(inodeNumber);
 	int firstBlockIndex = (int)fileHandle / 4096;
 	int numberOfBlocks = (size / 4096) + 1;
@@ -438,6 +448,8 @@ void writeInInode(int inodeNumber, unsigned int fileHandle, char* data, int size
 		int currentBlockNumber = getNthBlockNumberInInode(*inode, currentBlockIndex);
 		if(currentBlockNumber == INVALID_PTR) {
 			allocateBlockForInode(inodeNumber, currentBlockIndex);
+			free(inode);
+			inode = getInode(inodeNumber);
 			currentBlockNumber = getNthBlockNumberInInode(*inode, currentBlockIndex);
 		}
 		char* currentBlock = getNthBlockInInode(*inode, currentBlockIndex);

@@ -38,5 +38,7 @@ int truncateInode(int inodeNumber, int fromBlockIndex);
 int deleteRecord(char* filePath);
 int updateRecord(char *filePath, struct t2fs_record newRecord);
 struct t2fs_record_list* getRecordsInDir(int inodeNumber);
+struct t2fs_inode* getFatherDirInode(char* path);
+int min(int a, int b);
 
 #endif

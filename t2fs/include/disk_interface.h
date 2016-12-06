@@ -64,6 +64,7 @@ Retorna:
 -------------------------------------------------------------*/
 int writeBlock(int blockNumber, char data[4096]);
 
+
 /*-------------------------------------------------------------
 	Fun��o que reescreve parte do bloco indicado por blockNumber com os dados indicados por data
 Entrada:
@@ -76,6 +77,7 @@ Retorna:
 	ERRO: qualquer valor diferente de zero
 -------------------------------------------------------------*/
 int writeInBlock(int blockNumber, int initialByte, unsigned char* data, int size);
+
 
 /*-------------------------------------------------------------
 	Fun��o que atualiza um inode, cujo n�mero � passado por inodeNumber, com as informa��es de inode
@@ -135,7 +137,7 @@ Retorna:
 -------------------------------------------------------------*/
 int freeInode(int inodeNumber);
 
-char* intToChar4LtlEnd(int number);
+unsigned char* intToChar4LtlEnd(int number);
 unsigned int charToInt4LtlEnd(unsigned char* array);
 
 #endif

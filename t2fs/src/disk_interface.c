@@ -1,14 +1,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../include/apidisk.h"
+#include "../include/bitmap2.h"
 #include "../include/t2fs.h"
 #include "../include/disk_interface.h"
 
 int interfaceInited = 0;
 struct t2fs_superbloco superBlock;
 
-char* intToChar4LtlEnd(int number) {
-	char* result = (char*)malloc(sizeof(char)*4);
+unsigned char* intToChar4LtlEnd(int number) {
+	unsigned char* result = (unsigned char*)malloc(sizeof(unsigned char)*4);
 	result[0] = number;
 	result[1] = number >> 8;
 	result[2] = number >> 16;
@@ -22,8 +23,8 @@ DWORD charToInt4LtlEnd(unsigned char* array) {
 							| (DWORD)(array[2] << 16) | (DWORD)(array[3] << 24);
 }
 
-char* shortIntToChar2LtlEnd(short int number) {
-	char* result = (char*)malloc(sizeof(char)*2);
+unsigned char* shortIntToChar2LtlEnd(short int number) {
+	unsigned char* result = (unsigned char*)malloc(sizeof(unsigned char)*2);
 	result[0] = number;
 	result[1] = number >> 8;
 
@@ -64,7 +65,7 @@ char* getBlock(int blockNumber) {
             superBlock.freeBlocksBitmapSize +
             superBlock.freeInodeBitmapSize + superBlock.inodeAreaSize)*256 + blockNumber*4096;
     unsigned int sectorIndex = inDiskBlockIndex / 256;
-    char* resultingBlock = (char*)malloc(sizeof(char)*4096);
+    unsigned char* resultingBlock = (unsigned char*)malloc(sizeof(unsigned char)*4096);
     unsigned int i;
 
     for(i = 0; i < superBlock.blockSize; i++) {
@@ -72,7 +73,7 @@ char* getBlock(int blockNumber) {
             return NULL;
     }
 
-    return resultingBlock;
+    return (char*)resultingBlock;
 }
 
 struct t2fs_inode* getInode(unsigned int inodeNumber) {
@@ -85,7 +86,7 @@ struct t2fs_inode* getInode(unsigned int inodeNumber) {
     unsigned int sectorIndex = inDiskInodeIndex / 256;
     unsigned int inSectorIndex = inDiskInodeIndex - (sectorIndex*256);
 
-    unsigned char* buffer = (char*)malloc(sizeof(char)*256);
+    unsigned char* buffer = (unsigned char*)malloc(sizeof(unsigned char)*256);
     if(read_sector(sectorIndex, buffer) != 0)
         return NULL;
 
@@ -110,34 +111,81 @@ int writeBlock(int blockNumber, char data[4096]) {
     unsigned int i;
 
     for(i = 0; i < superBlock.blockSize; i++) {
-        if(write_sector(sectorIndex+i, data+256*i) != 0)
-            return NULL;
+        if(write_sector(sectorIndex+i, (unsigned char*)(data+256*i)) != 0)
+            return -1;
     }
 
     return 0;
 }
 
-int writeInBlock(int blockNumber, int initialByte, unsigned char* data, int size) {
+int writeInode(int inodeNumber, struct t2fs_inode inode) {
+    if(init() != 0)
+        return -1;
+
+    unsigned int inDiskInodeIndex = (superBlock.superblockSize +
+            superBlock.freeBlocksBitmapSize +
+            superBlock.freeInodeBitmapSize)*256 + inodeNumber*16;
+    unsigned int sectorIndex = inDiskInodeIndex / 256;
+    unsigned int inSectorIndex = inDiskInodeIndex - (sectorIndex*256);
+
+    unsigned char* buffer = (unsigned char*)malloc(sizeof(unsigned char)*256);
+    if(read_sector(sectorIndex, buffer) != 0)
+        return -1;
+
+    unsigned char* dataPtr0 = intToChar4LtlEnd(inode.dataPtr[0]);
+    memcpy(buffer+inSectorIndex, dataPtr0, 4);
+    free(dataPtr0);
+
+    unsigned char* dataPtr1 = intToChar4LtlEnd(inode.dataPtr[1]);
+    memcpy(buffer+inSectorIndex+4, dataPtr1, 4);
+    free(dataPtr1);
+
+    unsigned char* dataSingleInd = intToChar4LtlEnd(inode.singleIndPtr);
+    memcpy(buffer+inSectorIndex+8, dataSingleInd, 4);
+    free(dataSingleInd);
+
+    unsigned char* dataDoubleInd = intToChar4LtlEnd(inode.doubleIndPtr);
+    memcpy(buffer+inSectorIndex+12, dataDoubleInd, 4);
+    free(dataDoubleInd);
+
+    if(write_sector(sectorIndex, buffer) != 0)
+        return -1;
+
+    free(buffer);
     return 0;
 }
 
-int writeInode(int inodeNumber, struct t2fs_inode inode) {
-    return 0;
+int writeInBlock(int blockNumber, int initialByte, unsigned char* data, int size) {
+    char* block = getBlock(blockNumber);
+    if(block == NULL)
+        return -1;
+
+    memcpy(block+initialByte, data, size);
+    return writeBlock(blockNumber, block);
 }
 
 int allocateBlock() {
-    return 0;
+    int allocBlockNumber = searchBitmap2(1,0);
+    // se der problema pode ser aqui
+    if(allocBlockNumber >= 0)
+        setBitmap2(1,allocBlockNumber,1);
+
+    return allocBlockNumber;
 }
 
 int allocateInode() {
-    return 0;
+    int allocInodeNumber = searchBitmap2(0,0);
+    // se der problema pode ser aqui
+    if(allocInodeNumber >= 0)
+        setBitmap2(0,allocInodeNumber,1);
+
+    return allocInodeNumber;
 }
 
 int freeBlock(int blockNumber) {
-    return 0;
+    return (setBitmap2(1,blockNumber,0));
 }
 
 int freeInode(int inodeNumber) {
-    return 0;
+    return (setBitmap2(0,inodeNumber,0));
 }
-
